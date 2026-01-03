@@ -3,7 +3,7 @@
 
 # Core dependencies
 instaloader>=4.14.1
-PyQt5>=5.15.0
+PyQt6>=6.4.0
 pyqtdarktheme>=2.1.0
 
 # Note: qdarktheme is an alias for pyqtdarktheme

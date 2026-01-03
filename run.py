@@ -33,8 +33,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 """
 import sys
 import os
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtGui import QIcon
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QIcon
 import qdarktheme  # Add qdarktheme import
 from src.gui import InstaloaderGUIWrapper
 from src.core.logger import get_logger
@@ -84,7 +84,7 @@ def main():
     app.aboutToQuit.connect(lambda: logger.info("Application shutdown initiated"))
     
     # Start application event loop - blocks until app exit
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()

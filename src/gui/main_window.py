@@ -38,15 +38,15 @@ import sys
 import os
 import glob
 from datetime import datetime
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                            QLineEdit, QCheckBox, QPushButton, QTextEdit, 
                            QProgressBar, QLabel, QFileDialog, QDateEdit,
                            QGroupBox, QSizePolicy, QDoubleSpinBox, QSpinBox,
                            QTabWidget, QMessageBox, QFrame, QDialog, QInputDialog,
                            QApplication)
-from PyQt5.QtCore import (Qt, QDate, pyqtSignal, QEventLoop, QTimer, QMetaObject, 
+from PyQt6.QtCore import (Qt, QDate, pyqtSignal, QEventLoop, QTimer, QMetaObject, 
                          Q_ARG, QThread, pyqtSlot)
-from PyQt5.QtGui import QPixmap, QIcon, QFont, QIntValidator
+from PyQt6.QtGui import QPixmap, QIcon, QFont, QIntValidator
 
 from .components import LogViewer
 from ..core.downloader import DownloaderThread, ProfileCheckThread
@@ -159,7 +159,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         """
         left_panel = QWidget()
         layout = QVBoxLayout(left_panel)
-        left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        left_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Create tabbed interface
         self.tabs = QTabWidget()
@@ -209,14 +209,14 @@ class InstaloaderGUIWrapper(QMainWindow):
         
         # Image preview area with placeholder text
         self.preview_label = QLabel("No images downloaded yet")
-        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setMinimumHeight(400)
         self.preview_label.setStyleSheet("background-color: #2B2B2B; border: 1px solid #3E3E3E;")
         
         # Image information text area
         self.image_info = QTextEdit()
         self.image_info.setReadOnly(True)
-        self.image_info.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.image_info.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.image_info.setStyleSheet("background-color: #2B2B2B; border: 1px solid #3E3E3E;")
         
         # Add components to layout
@@ -251,15 +251,15 @@ class InstaloaderGUIWrapper(QMainWindow):
         self.username.setPlaceholderText("Instagram Username")
         self.password = QLineEdit()
         self.password.setPlaceholderText("Instagram Password")
-        self.password.setEchoMode(QLineEdit.Password)
+        self.password.setEchoMode(QLineEdit.EchoMode.Password)
         login_layout.addWidget(self.username)
         login_layout.addWidget(self.password)
         cred_layout.addLayout(login_layout)
         
         # Visual separator
         line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
         cred_layout.addWidget(line)
         
         # Save session option with help tooltip
@@ -315,9 +315,9 @@ class InstaloaderGUIWrapper(QMainWindow):
         self.session_button = QPushButton("Select Session File")
         
         # Configure size policies
-        self.session_path.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.session_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        checkbox_container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.session_path.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.session_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        checkbox_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
         session_layout.addWidget(self.session_path, stretch=1)
         session_layout.addWidget(self.session_button)
@@ -341,7 +341,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         
         self.check_name_button = QPushButton("Check Name")
         self.check_name_button.clicked.connect(self.check_profile_name)
-        self.check_name_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.check_name_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
         # Display area for profile verification results
         self.profile_name_display = QLabel("")
@@ -402,13 +402,13 @@ class InstaloaderGUIWrapper(QMainWindow):
         
         # Date range selection
         date_layout = QHBoxLayout()
-        date_layout.setAlignment(Qt.AlignCenter)  # Center contents
+        date_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center contents
         
         # Container for date range selectors
         self.date_widget = QWidget()
         date_sub_layout = QHBoxLayout(self.date_widget)
         date_sub_layout.setContentsMargins(0, 0, 0, 0)
-        date_sub_layout.setAlignment(Qt.AlignCenter)
+        date_sub_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Date range inputs
         since_label = QLabel("Date Range From:")
@@ -441,7 +441,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         
         # Add max posts limit option
         limit_layout = QHBoxLayout()
-        limit_layout.setAlignment(Qt.AlignCenter)
+        limit_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.limit_posts = QCheckBox("Limit Number of Posts:")
         self.limit_posts.setToolTip("Set a maximum number of posts to download")
@@ -463,13 +463,13 @@ class InstaloaderGUIWrapper(QMainWindow):
         
         # Separator line
         line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
         options_layout.addWidget(line)
         
         # Main content type selection row (centered)
         checkbox_row1 = QHBoxLayout()
-        checkbox_row1.setAlignment(Qt.AlignCenter)
+        checkbox_row1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.download_highlights = QCheckBox("+ Download Highlights")
         self.download_stories = QCheckBox("+ Download Stories")
         
@@ -479,7 +479,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         
         # Specialized download mode options (centered)
         checkbox_row2 = QHBoxLayout()
-        checkbox_row2.setAlignment(Qt.AlignCenter)
+        checkbox_row2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.only_highlights = QCheckBox("Only Download Highlights") 
         self.only_highlights.setToolTip("Skip downloading posts and stories, only download highlights")
         self.only_stories = QCheckBox("Only Download Stories")
@@ -694,14 +694,14 @@ class InstaloaderGUIWrapper(QMainWindow):
         # App title
         title_label = QLabel(f"{APP_NAME} v{APP_VERSION}")
         title_label.setStyleSheet("font-size: 24px; font-weight: bold;")
-        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         scroll_layout.addWidget(title_label)
 
         # Version info with hyperlink to Instaloader - changed color to white
         version_label = QLabel(f'Using <a href="https://instaloader.github.io/" style="color: white">Instaloader</a> Library v{INSTALOADER_VERSION}')
         version_label.setOpenExternalLinks(True)
         version_label.setStyleSheet("font-size: 14px; color: #808080;")
-        version_label.setAlignment(Qt.AlignCenter)
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         scroll_layout.addWidget(version_label)
 
         # Moved app description right after the version info
@@ -712,14 +712,14 @@ class InstaloaderGUIWrapper(QMainWindow):
         )
         desc_text.setWordWrap(True)
         desc_text.setStyleSheet("font-size: 14px;")
-        desc_text.setAlignment(Qt.AlignCenter)
+        desc_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         scroll_layout.addWidget(desc_text)
 
         # Developer info
         dev_label = QLabel('Developed by <a href="https://github.com/marhensa/" style="color: white">@marhensa</a>')
         dev_label.setOpenExternalLinks(True)
         dev_label.setStyleSheet("font-size: 16px; color: #4CAF50;")
-        dev_label.setAlignment(Qt.AlignCenter)
+        dev_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         dev_label.setWordWrap(True)
         scroll_layout.addWidget(dev_label)
 
@@ -727,21 +727,21 @@ class InstaloaderGUIWrapper(QMainWindow):
         github_label = QLabel('<a href="https://github.com/marhensa/instaloader-gui-wrapper" style="color: #2196F3;">GitHub Repository</a>')
         github_label.setOpenExternalLinks(True)
         github_label.setStyleSheet("font-size: 14px;")
-        github_label.setAlignment(Qt.AlignCenter)
+        github_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         scroll_layout.addWidget(github_label)
         
         # Donation info
         donation_label = QLabel('If you find this tool useful, please consider supporting development: <a href="https://ko-fi.com/marhensa" style="color: white">Ko-fi @marhensa</a>')
         donation_label.setOpenExternalLinks(True)
         donation_label.setStyleSheet("font-size: 14px; color: #FFB74D;")
-        donation_label.setAlignment(Qt.AlignCenter)
+        donation_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         donation_label.setWordWrap(True)
         scroll_layout.addWidget(donation_label)
 
         # Separator line
         line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
         scroll_layout.addWidget(line)
 
         # Disclaimer text
@@ -758,7 +758,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         )
         disclaimer_text.setWordWrap(True)
         disclaimer_text.setStyleSheet("font-size: 14px;")
-        disclaimer_text.setAlignment(Qt.AlignLeft)
+        disclaimer_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
         scroll_layout.addWidget(disclaimer_text)
 
         # Add stretch to keep content at top
@@ -777,7 +777,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         self.current_progress = QProgressBar()
         
         for bar in (self.overall_progress, self.current_progress):
-            bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             bar.setMinimumWidth(200)
             bar.setFixedHeight(20)
         
@@ -1593,7 +1593,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         self.two_factor_input = QLineEdit()
         self.two_factor_input.setPlaceholderText("Enter 6-digit verification code")
         self.two_factor_input.setMaxLength(6)
-        self.two_factor_input.setAlignment(Qt.AlignCenter)
+        self.two_factor_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.two_factor_input.setMinimumHeight(36)
         self.two_factor_input.setFont(QFont("Arial", 14))
         

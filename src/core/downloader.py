@@ -48,7 +48,7 @@ import logging
 import os
 import re
 import traceback
-from PyQt5.QtCore import QThread, pyqtSignal, QEventLoop, QTimer, Qt
+from PyQt6.QtCore import QThread, pyqtSignal, QEventLoop, QTimer, Qt
 import instaloader
 from .logger import get_logger, GUILogHandler
 import glob

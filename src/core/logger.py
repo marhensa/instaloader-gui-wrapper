@@ -40,7 +40,7 @@ import logging
 import os
 import atexit
 import sys
-from PyQt5.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 class GUILogHandler(logging.Handler):
     """

@@ -24,8 +24,8 @@ and/or distribute copies of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 """
-from PyQt5.QtWidgets import QTextEdit
-from PyQt5.QtGui import QTextCharFormat, QColor
+from PyQt6.QtWidgets import QTextEdit
+from PyQt6.QtGui import QTextCharFormat, QColor
 from ..config.constants import COLORS
 
 
