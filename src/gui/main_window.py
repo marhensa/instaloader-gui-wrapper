@@ -22,7 +22,7 @@ Classes:
     InstaloaderGUIWrapper: Main application window class that manages the entire UI
 
 Author: @marhensa
-Version: 1.2
+Version: 1.3
 License: MIT License
 
 Copyright (c) 2026 marhensa
@@ -55,7 +55,7 @@ from ..config.constants import (DEFAULT_BASE_DELAY, DEFAULT_JITTER,
                               DEFAULT_STORY_MULTIPLIER, DEFAULT_CRITICAL_WAIT, 
                               DEFAULT_LONG_SESSION_CHANCE, DEFAULT_REQUEST_TIMEOUT,
                               SUPPORTED_MEDIA_FORMATS, APP_NAME, APP_VERSION, 
-                              INSTALOADER_VERSION, APP_ROOT, get_resource_path)
+                              INSTALOADER_VERSION, APP_ROOT, EXEC_DIR, get_resource_path)
 from ..core.logger import get_logger
 
 class InstaloaderGUIWrapper(QMainWindow):
@@ -373,6 +373,9 @@ class InstaloaderGUIWrapper(QMainWindow):
         dir_label = QLabel("📂 Download Location:")
         self.dir_path = QLineEdit()
         self.dir_path.setReadOnly(True)
+        # Auto-populate with default downloads directory
+        # Using EXEC_DIR to ensure it points to the AppImage/Exe location, not temp dir
+        self.dir_path.setText(EXEC_DIR)
         self.dir_button = QPushButton("Browse...")
         self.dir_button.clicked.connect(self.select_directory)
         
@@ -926,7 +929,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         Args:
             state (int): The state of the only_stories checkbox (checked/unchecked)
         """
-        if state == Qt.Checked:
+        if self.only_stories.isChecked():
             self.download_highlights.setChecked(False)
             self.download_highlights.setEnabled(False)
             self.profile_pic_only.setChecked(False)
@@ -952,7 +955,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         Args:
             state (int): The state of the only_highlights checkbox (checked/unchecked)
         """
-        if state == Qt.Checked:
+        if self.only_highlights.isChecked():
             self.download_stories.setChecked(False)
             self.download_stories.setEnabled(False)
             self.profile_pic_only.setChecked(False)
@@ -982,10 +985,15 @@ class InstaloaderGUIWrapper(QMainWindow):
             self.only_highlights,
             self.ignore_date_range
         ]
-        if state == Qt.Checked:
+        if self.profile_pic_only.isChecked():
             for checkbox in checkboxes:
-                checkbox.setChecked(False)
+                # Don't uncheck ignore_date_range, we need to handle it separately
+                if checkbox != self.ignore_date_range:
+                    checkbox.setChecked(False)
                 checkbox.setEnabled(False)
+            
+            # Profile pics are always current, so date range must be ignored
+            self.ignore_date_range.setChecked(True)
             self.date_widget.setEnabled(False)
         else:
             for checkbox in checkboxes:
@@ -1063,6 +1071,8 @@ class InstaloaderGUIWrapper(QMainWindow):
                 self.downloader_thread.file_downloaded_signal.connect(self.update_preview)
                 self.downloader_thread.stopped_signal.connect(self.download_stopped)
                 self.downloader_thread.state_changed_signal.connect(self.handle_state_change)
+                self.downloader_thread.two_factor_required_signal.connect(self.handle_two_factor)
+                self.two_factor_signal.connect(self.downloader_thread.set_two_factor_code)
                 
                 # Update UI state
                 self.start_button.setText("⏸ Pause")
@@ -1303,8 +1313,8 @@ class InstaloaderGUIWrapper(QMainWindow):
         return pixmap.scaled(
             new_width, 
             new_height,
-            Qt.KeepAspectRatio, 
-            Qt.SmoothTransformation
+            Qt.AspectRatioMode.KeepAspectRatio, 
+            Qt.TransformationMode.SmoothTransformation
         )
 
     def show_video_placeholder(self, video_path):
@@ -1662,7 +1672,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         Args:
             state (int): The state of the download_single_post checkbox (checked/unchecked)
         """
-        is_single_post = state == Qt.Checked
+        is_single_post = self.download_single_post.isChecked()
         
         # Enable/disable appropriate fields
         self.post_url.setEnabled(is_single_post)
@@ -1670,17 +1680,18 @@ class InstaloaderGUIWrapper(QMainWindow):
         
         if is_single_post:
             self.target_profile.setText("")
+            # Force ignore date range to be checked and disabled
+            self.ignore_date_range.setChecked(True)
+            self.ignore_date_range.setEnabled(False)
+            self.date_widget.setEnabled(False)
         else:
             self.post_url.setText("")
+            # Re-enable date range controls
+            self.ignore_date_range.setEnabled(True)
+            self.date_widget.setEnabled(not self.ignore_date_range.isChecked())
         
-        # Only disable date filtering for non-highlight content
-        # Keep it enabled for highlights which can contain stories from various dates
-        self.date_widget.setEnabled(True)  # Keep date widget always enabled
-        
-        # Disable most download options when in single post mode, but keep date filtering options
+        # Disable most download options when in single post mode
         download_option_checkboxes = [
-            # Keep ignore_date_range enabled for all content types
-            # self.ignore_date_range,  # Removed from this list to keep it enabled
             self.download_highlights,
             self.download_stories, 
             self.only_highlights,

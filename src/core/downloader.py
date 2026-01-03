@@ -3,7 +3,7 @@ Instaloader GUI Wrapper - Download Core
 ======================================
 
 This module provides the core functionality for downloading Instagram content through
-a multi-threaded approach using PyQt5's QThread. It handles various types of Instagram
+a multi-threaded approach using PyQt6's QThread. It handles various types of Instagram
 content including profiles, posts, stories, highlights, and reels.
 
 The module implements sophisticated anti-detection mechanisms to avoid Instagram's
@@ -27,7 +27,7 @@ Classes:
     ProfileCheckThread: Thread for verifying Instagram profile existence
 
 Author: @marhensa
-Version: 1.2
+Version: 1.3
 License: MIT License
 
 Copyright (c) 2026 marhensa
@@ -344,6 +344,36 @@ class DownloaderThread(QThread):
             
             return True, "Profile picture downloaded successfully!"
         except Exception as e:
+            # Fallback for date parsing errors or other Instaloader issues
+            if "time data" in str(e) or "format" in str(e):
+                try:
+                    self.logger.info("Instaloader failed to download profile pic, attempting manual fallback...")
+                    # Manually download using the session
+                    pic_url = profile.profile_pic_url
+                    
+                    if pic_url:
+                        # Use session directly to get the image content
+                        # Access underlying requests session (protected member but standard in Instaloader usage)
+                        # Ensure we have a session to use
+                        if hasattr(L.context, '_session'):
+                            session = L.context._session
+                        else:
+                            session = getattr(L.context, 'session', None)
+                            
+                        if session:
+                            response = session.get(pic_url)
+                            
+                            if response.status_code == 200:
+                                filename = f"{profile.userid}_{int(time.time())}.jpg"
+                                file_path = os.path.join(profile_pic_dir, filename)
+                                with open(file_path, 'wb') as f:
+                                    f.write(response.content)
+                                
+                                self.file_downloaded_signal.emit(file_path)
+                                return True, "Profile picture downloaded successfully (fallback mode)!"
+                except Exception as fallback_e:
+                    self.logger.error(f"Fallback download failed: {fallback_e}")
+            
             return False, f"Error downloading profile picture: {e}"
 
     def calculate_total_items(self, profile, L):
@@ -363,9 +393,16 @@ class DownloaderThread(QThread):
             until_date = datetime.strptime(until_date, "%Y-%m-%d")
         elif hasattr(until_date, 'timetuple'):
             until_date = datetime.combine(until_date, datetime.max.time())
+            
+        # Add profile picture to total if enabled
+        if self.config.get('profile_pic_only', False):
+            total += 1
+            downloads.append("Profile Picture")
         
         # Calculate posts count if enabled
-        if not self.config.get('only_stories', False) and not self.config.get('only_highlights', False):
+        if not self.config.get('profile_pic_only', False) and \
+           not self.config.get('only_stories', False) and \
+           not self.config.get('only_highlights', False):
             if self.config.get('ignore_date_range', False):
                 # Use post limit or profile mediacount when ignoring date range
                 posts_count = min(
@@ -415,8 +452,6 @@ class DownloaderThread(QThread):
                 self.logger.warning(f"Could not pre-count highlights: {e}")
 
         # Calculate stories count if enabled and not only_highlights
-        if self.config['download_stories'] and not self.config.get('only_highlights', False):
-            try:
                 stories = L.get_stories([profile.userid])
                 story_items = 0
                 for story in stories:

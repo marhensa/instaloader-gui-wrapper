@@ -17,7 +17,7 @@ Having these constants in a centralized location makes it easier to modify appli
 behavior without having to search through multiple files.
 
 Author: @marhensa
-Version: 1.2.1
+Version: 1.3
 License: MIT License
 
 Copyright (c) 2026 marhensa
@@ -44,7 +44,7 @@ def get_resource_path(relative_path):
 
 # Application metadata and directory structure
 APP_NAME = "Instaloader GUI Wrapper"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3"
 
 # Get instaloader version dynamically
 try:
@@ -53,11 +53,23 @@ try:
 except (ImportError, AttributeError):
     INSTALOADER_VERSION = "unknown"
 
-# Get absolute path to the application root directory
+# Get absolute path to the application root directory (where code lives)
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Configuration file paths
-CONFIG_DIR = os.path.join(APP_ROOT, 'user-settings')
+# Determine execution directory (where the binary/script resides)
+# This handles AppImage, PyInstaller, and source execution differently
+if 'APPIMAGE' in os.environ:
+    # Running as AppImage - use the directory containing the AppImage file
+    EXEC_DIR = os.path.dirname(os.environ['APPIMAGE'])
+elif getattr(sys, 'frozen', False):
+    # Running as PyInstaller executable - use directory containing executable
+    EXEC_DIR = os.path.dirname(sys.executable)
+else:
+    # Running from source - use project root
+    EXEC_DIR = APP_ROOT
+
+# Configuration file paths - store settings near executable/AppImage
+CONFIG_DIR = os.path.join(EXEC_DIR, 'user-settings')
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'settings.json')
 CONFIG_BACKUP = f"{CONFIG_FILE}.backup"
 

@@ -19,7 +19,7 @@ Classes:
     Settings: Static utility class for managing application settings
 
 Author: @marhensa
-Version: 1.2
+Version: 1.3
 License: MIT License
 
 Copyright (c) 2026 marhensa

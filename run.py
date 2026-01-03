@@ -19,7 +19,7 @@ Example:
     $ python run.py
 
 Author: @marhensa
-Version: 1.2
+Version: 1.3
 License: MIT License
 
 Copyright (c) 2026 marhensa
@@ -33,6 +33,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 """
 import sys
 import os
+import locale  # Restore missing import
+
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 import qdarktheme  # Add qdarktheme import
@@ -57,6 +59,16 @@ def main():
     # Create Qt application
     app = QApplication(sys.argv)
     
+    # Set convention for time formatting to C (standard English)
+    # Qt init can reset locale, so we must set it AFTER QApplication creation
+    try:
+        old_locale = locale.getlocale(locale.LC_TIME)
+        locale.setlocale(locale.LC_TIME, 'C')
+        new_locale = locale.getlocale(locale.LC_TIME)
+        logger.info(f"Locale forced to C for time parsing. Old: {old_locale}, New: {new_locale}")
+    except locale.Error as e:
+        logger.error(f"Failed to set locale: {e}")
+
     # Set application identity for Wayland/desktop integration
     app.setApplicationName("instaloader-gui-wrapper")
     app.setOrganizationName("marhensa")
@@ -68,7 +80,6 @@ def main():
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
         logger.info(f"Application icon set from: {icon_path}")
-    
     
     # Apply dark theme to all widgets using qdarktheme
     qdarktheme.setup_theme()
