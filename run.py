@@ -32,7 +32,9 @@ and/or distribute copies of the Software.
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 """
 import sys
+import os
 from PyQt5.QtWidgets import QApplication
+from PyQt5.QtGui import QIcon
 import qdarktheme  # Add qdarktheme import
 from src.gui import InstaloaderGUIWrapper
 from src.core.logger import get_logger
@@ -54,6 +56,19 @@ def main():
     
     # Create Qt application
     app = QApplication(sys.argv)
+    
+    # Set application identity for Wayland/desktop integration
+    app.setApplicationName("instaloader-gui-wrapper")
+    app.setOrganizationName("marhensa")
+    app.setDesktopFileName("instaloader-gui-wrapper")
+    
+    # Set application icon
+    app_root = os.path.dirname(os.path.abspath(__file__))
+    icon_path = os.path.join(app_root, "assets", "icon.png")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+        logger.info(f"Application icon set from: {icon_path}")
+    
     
     # Apply dark theme to all widgets using qdarktheme
     qdarktheme.setup_theme()

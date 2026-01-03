@@ -17,6 +17,7 @@ ENV/
 # Build artifacts
 build/
 dist/
+*.AppImage
 *.spec
 *.exe
 
@@ -25,7 +26,8 @@ dist/
 
 # User data (keep templates but ignore actual data)
 downloads/
-user-settings/settings.json
+user-settings/
+session*
 
 # System files
 desktop.ini

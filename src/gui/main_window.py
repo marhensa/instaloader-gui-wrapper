@@ -892,7 +892,7 @@ class InstaloaderGUIWrapper(QMainWindow):
             self,
             "Select Session File",
             default_dir,
-            "All Files (*.*;*)")  # Show all files including those without extension
+            "All Files (*)")  # Cross-platform filter for all files
             
         if file_path:
             self.session_path.setText(os.path.normpath(file_path))

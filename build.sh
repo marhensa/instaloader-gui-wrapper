@@ -50,6 +50,7 @@ Icon=instaloader-gui-wrapper
 Type=Application
 Categories=Utility;Network;
 Comment=Download Instagram content with a GUI
+StartupWMClass=instaloader-gui-wrapper
 EOF
     
     # Copy desktop file to AppDir root (required)
