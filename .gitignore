@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+*.spec
+*.exe
+
+# Logs
+*.log
+
+# User data (keep templates but ignore actual data)
+downloads/
+user-settings/settings.json
+
+# System files
+desktop.ini
+Thumbs.db
+.DS_Store
+
+# Backup/archive files
+*.zip
+*.rar
+*.7z
+*.backup
+appimagetool-*.AppImage
+
+# PyInstaller
+*.manifest
+*.pdb
