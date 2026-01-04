@@ -65,7 +65,17 @@ Download the latest release from [Releases](https://github.com/marhensa/instaloa
 
 ### Download Structure
 
-**Option 1: Separate Folders (Default)**
+**Standard Downloads (Target Profile and Single Post):**
+```
+downloads/
+└── username/
+    ├── profile_pic/
+    ├── posts/
+    ├── stories/
+    └── highlights/
+```
+
+**Saved Posts Downloads(Default):**
 ```
 downloads/
 └── saved_posts/
@@ -76,23 +86,13 @@ downloads/
         └── ...
 ```
 
-**Option 2: Single Folder with Prefix**
+**Saved Posts Downloads (Single Folder):**
 ```
 downloads/
 └── saved_posts/
     ├── username1_2024-01-01_UTC.jpg
     ├── username2_2024-01-02_UTC.jpg
     └── ...
-```
-
-**Standard Downloads:**
-```
-downloads/
-└── username/
-    ├── profile_pic/
-    ├── posts/
-    ├── stories/
-    └── highlights/
 ```
 
 ## ⚙️ Advanced Settings
