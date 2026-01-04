@@ -74,13 +74,13 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, 'settings.json')
 CONFIG_BACKUP = f"{CONFIG_FILE}.backup"
 
 # Anti-detection system default parameters
-DEFAULT_BASE_DELAY = 8.0       # Base delay between requests in seconds
-DEFAULT_JITTER = 3.0           # Random time addition to appear more human-like
-DEFAULT_STORY_MULTIPLIER = 2.5 # Stories are rate-limited more strictly
+DEFAULT_BASE_DELAY = 3.0       # Base delay between requests in seconds
+DEFAULT_JITTER = 2.0           # Random time addition to appear more human-like
+DEFAULT_STORY_MULTIPLIER = 1.5 # Stories are rate-limited more strictly
 DEFAULT_CRITICAL_WAIT = 30     # Minutes to wait after encountering rate limits
-DEFAULT_LONG_SESSION_CHANCE = 0.25  # Probability of taking a longer pause
-DEFAULT_LONG_PAUSE_MIN = 20.0       # Minimum duration of a safety break in seconds
-DEFAULT_LONG_PAUSE_MAX = 30.0       # Maximum duration of a safety break in seconds
+DEFAULT_LONG_SESSION_CHANCE = 0.10  # Probability of taking a longer pause
+DEFAULT_LONG_PAUSE_MIN = 10.0       # Minimum duration of a safety break in seconds
+DEFAULT_LONG_PAUSE_MAX = 17.0       # Maximum duration of a safety break in seconds
 DEFAULT_REQUEST_TIMEOUT = 300  # Request timeout in seconds
 
 # Media handling settings
