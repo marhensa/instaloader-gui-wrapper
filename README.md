@@ -17,13 +17,14 @@ A desktop application that provides a user-friendly graphical interface for down
 ## ✨ Features
 
 - **Profile Downloads** - Posts, stories, highlights, and profile pictures
+- **Saved Posts** - Download your own saved posts collection with flexible organization
 - **Single Content** - Download individual posts, reels, stories, or highlights via URL
-- **Anti-Detection** - Configurable delays to mimic human behavior
+- **Anti-Detection** - Highly configurable "Balanced" timing system to mimic human behavior
 - **2FA Support** - Full two-factor authentication support
+- **Unified Progress** - Overall progress bar for all download modes
+- **Enhanced Stop** - Immediate cancellation responsiveness during stays and retries
 - **Date Filtering** - Download content within specific date ranges
 - **Live Preview** - See downloaded content in real-time
-- **Login Status** - Clear visual indicators for login state (session vs credentials)
-- **Flexible Saving** - Choose between separate folders or single folder with prefixes for saved posts
 - **Dark Theme** - Modern PyQt6 dark-themed interface
 
 ## 🚀 Quick Start
@@ -98,10 +99,11 @@ downloads/
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| Base Delay | Time between downloads | 8s |
-| Random Jitter | Additional random delay | 3s |
-| Story Multiplier | Extra delay for stories | 2.5x |
-| Critical Wait | Recovery after errors | 30min |
+| Base Delay | Baseline time between requests | 3s |
+| Random Jitter | Extra random time to appear human | 2s |
+| Story Multiplier | Safety multiplier for stories/highlights | 1.5x |
+| Long Pause | Range for random "session" breaks | 10-17s |
+| Critical Wait | Recovery time after rate limits | 30min |
 
 ## 🔒 Security
 
