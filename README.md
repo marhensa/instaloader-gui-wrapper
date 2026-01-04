@@ -14,7 +14,7 @@ A desktop application that provides a user-friendly graphical interface for down
 
 ![Screenshot](assets/screenshot.jpg)
 
-## ✨ Features
+## Features
 
 - **Profile Downloads** - Posts, stories, highlights, and profile pictures
 - **Saved Posts** - Download your own saved posts collection with flexible organization
@@ -27,7 +27,7 @@ A desktop application that provides a user-friendly graphical interface for down
 - **Live Preview** - See downloaded content in real-time
 - **Dark Theme** - Modern PyQt6 dark-themed interface
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Option 1: Run from Source
 
@@ -43,11 +43,11 @@ pip install -r requirements.txt
 python run.py
 ```
 
-### Option 2: Windows Executable
+### Option 2: Windows & Linux Executables
 
-Download the latest release from [Releases](https://github.com/marhensa/instaloader-gui-wrapper/releases) and run `Instaloader-GUI-Wrapper.exe`.
+Download the latest release from [Releases](https://github.com/marhensa/instaloader-gui-wrapper/releases) and run the executable for your platform.
 
-## 📖 Usage
+## Usage
 
 1. **Login** - Enter credentials or use a session file
 2. **Select Target** - Enter a username or paste a post/reel/story URL
@@ -95,7 +95,7 @@ downloads/
     └── ...
 ```
 
-## ⚙️ Advanced Settings
+## Advanced Settings
 
 | Setting | Description | Default |
 |---------|-------------|---------|
@@ -105,7 +105,7 @@ downloads/
 | Long Pause | Range for random "session" breaks | 10-17s |
 | Critical Wait | Recovery time after rate limits | 30min |
 
-## 🔒 Security
+## Security
 
 - Credentials are never stored in plain text
 - Session files location:
@@ -113,7 +113,7 @@ downloads/
   - Linux/Mac: `~/.config/instaloader/session-username`
 - **Delete session files on shared computers!**
 
-## 🔧 Building from Source
+## Building from Source
 
 ### Windows
 ```bash
@@ -126,6 +126,9 @@ build.bat
 **Requirements**: `python3`, `pip`, `binutils`, `fuse-libs`, `file`
 
 ```bash
+# Install dependencies (Ubuntu/Debian)
+sudo apt update && sudo apt install -y python3 python3-pip binutils libfuse2 file
+
 # Install dependencies (Fedora/RHEL)
 sudo dnf install -y python3 binutils fuse-libs file
 
@@ -144,13 +147,16 @@ pip install pyinstaller
 pyinstaller --onefile --windowed --name "Instaloader-GUI-Wrapper" run.py
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 instaloader-gui-wrapper/
 ├── run.py              # Entry point
 ├── requirements.txt    # Dependencies
 ├── build.bat           # Build script
+├── build.sh            # Build script
+├── downloads/          # Downloaded content
+├── user-settings/      # User settings
 └── src/
     ├── gui/            # UI components
     ├── core/           # Download logic
@@ -167,6 +173,6 @@ If you find this tool useful, consider supporting development:
 
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Me-ff5f5f?logo=ko-fi)](https://ko-fi.com/marhensa)
 
-## 📄 License
+## License
 
 MIT License © 2026 [@marhensa](https://github.com/marhensa)
