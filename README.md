@@ -14,6 +14,12 @@ A desktop application that provides a user-friendly graphical interface for down
 
 ![Screenshot](assets/screenshot.jpg)
 
+## ☕ Support
+
+If you find this tool useful, consider supporting development:
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Me-ff5f5f?logo=ko-fi)](https://ko-fi.com/marhensa)
+
 ## Features
 
 - **Profile Downloads** - Posts, stories, highlights, and profile pictures
@@ -50,14 +56,16 @@ Download the latest release from [Releases](https://github.com/marhensa/instaloa
 ## Usage
 
 1. **Login** - Enter credentials or use a session file
-2. **Select Target** - Enter a username or paste a post/reel/story URL
-3. **Choose Location** - Select download directory
-4. **Start Download** - Click ▶ Start
+2. **Choose Mode** - Select between **Target Profile**, **Saved Posts**, or **Single Content**
+3. **Set Parameters** - Enter the target username or URL, and configure filters like date ranges, stories, or highlights
+4. **Set Location** - Choose the download directory
+5. **Start** - Click ▶ Start to begin the download process
 
 ### Supported URL Formats
 
 | Type | Example URL |
 |------|-------------|
+| Profile | `instagram.com/username` |
 | Post | `instagram.com/p/ABC123` |
 | Reel | `instagram.com/reel/ABC123` |
 | Story | `instagram.com/stories/username/123456` |
@@ -166,12 +174,6 @@ instaloader-gui-wrapper/
 ## ⚠️ Disclaimer
 
 This tool is for **personal use only**. Respect Instagram's terms of service and copyright rules. Excessive downloads may trigger rate limiting. The developer is not responsible for misuse.
-
-## ☕ Support
-
-If you find this tool useful, consider supporting development:
-
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Me-ff5f5f?logo=ko-fi)](https://ko-fi.com/marhensa)
 
 ## License
 
