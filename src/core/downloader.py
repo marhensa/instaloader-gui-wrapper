@@ -13,10 +13,11 @@ Key Features:
 - Threaded downloads with progress reporting
 - Two-factor authentication support
 - Anti-detection timing system
-- Session management
-- Comprehensive error handling
+- Session management and robust username extraction
+- Flexible folder structure for saved posts (Per-owner vs Single folder)
 - Support for various content types:
   * Complete profiles
+  * Saved posts
   * Individual posts
   * Stories and highlights
   * Reels
@@ -27,7 +28,7 @@ Classes:
     ProfileCheckThread: Thread for verifying Instagram profile existence
 
 Author: @marhensa
-Version: 1.3
+Version: 1.4
 License: MIT License
 
 Copyright (c) 2026 marhensa
@@ -156,11 +157,33 @@ class DownloaderThread(QThread):
         self.logger.info("Download thread stop requested")
         self.is_running = False
         self.is_stopped = True
+        # Ensure it doesn't stay blocked if paused
+        self.pause_lock.set()
         # Force thread termination if it doesn't respond
         self.requestInterruption()
         # Emit the stopped signal before calling super().quit()
         self.stopped_signal.emit()
         super().quit()
+
+    def stop(self):
+        """Stop the download process."""
+        self.quit()
+
+    def pause(self):
+        """Pause the download process."""
+        self.is_paused = True
+        self.pause_lock.clear()  # Blocking
+        self.logger.info("Download paused by user")
+        self.state_changed_signal.emit('paused', 'Download process paused - Use Resume button to continue')
+        return True
+
+    def resume(self):
+        """Resume the download process."""
+        self.is_paused = False
+        self.pause_lock.set()  # Unblocking
+        self.logger.info("Download resumed by user")
+        self.state_changed_signal.emit('resumed', 'Download process resumed from pause')
+        return True
 
     def handle_authentication(self, L):
         """
@@ -185,8 +208,40 @@ class DownloaderThread(QThread):
                     self.logger.error(f"Session file not found: {session_file}")
                     raise FileNotFoundError("Session file not found!")
                     
-                # Extract username from session filename
-                username = os.path.splitext(os.path.basename(session_file))[0]
+                # Extract username from session file cookies
+                import pickle
+                try:
+                    with open(session_file, 'rb') as f:
+                        session_data = pickle.load(f)
+                    # Try to find username from session cookies
+                    username = None
+                    
+                    # Handle different session data structures
+                    cookies = []
+                    if isinstance(session_data, dict):
+                        cookies = session_data.values()
+                    elif hasattr(session_data, '__iter__'):
+                        cookies = session_data
+
+                    for cookie in cookies:
+                        if hasattr(cookie, 'name') and (cookie.name == 'ds_user' or cookie.name == 'ds_user_id'):
+                            # ds_user contains username, ds_user_id contains user ID
+                            if cookie.name == 'ds_user':
+                                username = cookie.value
+                                break
+                    # Fallback: try to get from session struct
+                    if not username:
+                        # Try filename-based extraction as last resort
+                        username = os.path.splitext(os.path.basename(session_file))[0]
+                        if username.startswith('session-'):
+                            username = username[8:]
+                except Exception as e:
+                    self.logger.warning(f"Could not extract username from session file: {e}")
+                    # Fallback to filename-based extraction
+                    username = os.path.splitext(os.path.basename(session_file))[0]
+                    if username.startswith('session-'):
+                        username = username[8:]
+                
                 self.logger.info(f"Loading session file for user: {username}")
                 L.load_session_from_file(username, session_file)
                 return True, "Session loaded successfully!"
@@ -394,8 +449,10 @@ class DownloaderThread(QThread):
         elif hasattr(until_date, 'timetuple'):
             until_date = datetime.combine(until_date, datetime.max.time())
             
-        # Add profile picture to total if enabled
-        if self.config.get('profile_pic_only', False):
+        # Add profile picture to total if enabled or if downloading posts
+        if self.config.get('profile_pic_only', False) or (
+           not self.config.get('only_stories', False) and 
+           not self.config.get('only_highlights', False)):
             total += 1
             downloads.append("Profile Picture")
         
@@ -452,6 +509,8 @@ class DownloaderThread(QThread):
                 self.logger.warning(f"Could not pre-count highlights: {e}")
 
         # Calculate stories count if enabled and not only_highlights
+        if self.config['download_stories'] and not self.config.get('only_highlights', False):
+            try:
                 stories = L.get_stories([profile.userid])
                 story_items = 0
                 for story in stories:
@@ -550,8 +609,8 @@ class DownloaderThread(QThread):
             else:
                 self.log_signal.emit(f"Estimated total posts: {target_posts}", "INFO")
             
-            # Set initial progress to 0
-            self.progress_signal.emit(0, target_posts, 'overall')
+            # Set initial progress
+            self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
                 
             for post in posts:
                 if not self.is_running:
@@ -588,8 +647,9 @@ class DownloaderThread(QThread):
                     self.log_signal.emit(f"Skipping existing post from {post.date}", "INFO")
                     skipped += 1
                     post_count += 1
+                    self.completed_items += 1
                     # Update progress for skipped posts
-                    self.progress_signal.emit(post_count, target_posts if post_limit > 0 else target_posts, 'overall')
+                    self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
                     continue
                 
                 # Download the post
@@ -634,19 +694,16 @@ class DownloaderThread(QThread):
                 
                 # Add random longer pauses for safety
                 if post_count % 5 == 0 and random.random() < self.LONG_SESSION_CHANCE:
-                    extra_delay = 20 + random.uniform(0, 10)
+                    pause_min = self.config.get('long_pause_min', 20.0)
+                    pause_max = self.config.get('long_pause_max', 30.0)
+                    extra_delay = pause_min + random.uniform(0, max(0, pause_max - pause_min))
                     self.log_signal.emit(f"Long session safety delay: {extra_delay:.1f}s", "INFO")
                     time.sleep(extra_delay)
                 
                 post_count += 1
+                self.completed_items += 1
                 # Update progress using our adjusted target
-                if post_limit > 0:
-                    # If we have a post limit, use that as denominator
-                    self.progress_signal.emit(post_count, post_limit, 'overall')
-                else:
-                    # Otherwise use our estimated target, but cap at 100%
-                    progress_value = min(post_count, target_posts)
-                    self.progress_signal.emit(progress_value, target_posts, 'overall')
+                self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
             
             # Final summary message
             self.log_signal.emit(
@@ -655,9 +712,11 @@ class DownloaderThread(QThread):
                 "INFO"
             )
             
-            # Set the progress to 100% when complete
-            final_target = post_limit if post_limit > 0 else target_posts
-            self.progress_signal.emit(final_target, final_target, 'overall')
+            # Ensure we add any expected posts that were missed or limited
+            remaining = target_posts - post_count
+            if remaining > 0:
+                self.completed_items += remaining
+            self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
             
         else:
             # Single-pass approach for date-filtered downloads
@@ -672,7 +731,7 @@ class DownloaderThread(QThread):
             processed_days_set = set()  # Track which days we've processed posts from
             
             self.log_signal.emit(f"Processing posts in date range: {since_date.date()} to {until_date.date()}", "INFO")
-            self.progress_signal.emit(0, total_days, 'overall')  # Start at 0%
+            self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
             
             for post in posts:
                 # Update discovery progress periodically
@@ -687,8 +746,11 @@ class DownloaderThread(QThread):
                 # Check if past the date range (optimization for chronological order)
                 if post.date < since_date:
                     self.log_signal.emit("Reached posts older than the specified date range, stopping", "INFO")
-                    # Ensure we show 100% progress when we've processed all dates
-                    self.progress_signal.emit(total_days, total_days, 'overall')
+                    # Ensure we account for the rest of the days in the range
+                    days_remaining = total_days - len(processed_days_set)
+                    if days_remaining > 0:
+                        self.completed_items += days_remaining
+                    self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
                     break
                 
                 # Check if within date range
@@ -698,9 +760,9 @@ class DownloaderThread(QThread):
                     # Update day-based progress whenever we see a post from a new day
                     if post.date.date() not in processed_days_set:
                         processed_days_set.add(post.date.date())
-                        days_processed = len(processed_days_set)
+                        self.completed_items += 1
                         # Update overall progress
-                        self.progress_signal.emit(min(days_processed, total_days), total_days, 'overall')
+                        self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
                         last_post_date = post.date.date()
                     
                     # Process the post
@@ -734,11 +796,15 @@ class DownloaderThread(QThread):
                     max_retries = 3
                     success = False
                     
-                    while retry_count < max_retries and not success:
+                    while retry_count < max_retries and not success and self.is_running:
                         try:
                             # Show download in progress
                             self.progress_signal.emit(25, 100, 'current')
                             L.download_post(post, target=posts_dir)
+                            
+                            if not self.is_running:
+                                break
+                                
                             self.progress_signal.emit(75, 100, 'current')
                             
                             # Emit signal for any new files
@@ -771,17 +837,29 @@ class DownloaderThread(QThread):
                     
                     # Add random longer pauses for safety
                     if matching_posts % 5 == 0 and random.random() < self.LONG_SESSION_CHANCE:
-                        extra_delay = 20 + random.uniform(0, 10)
+                        pause_min = self.config.get('long_pause_min', 20.0)
+                        pause_max = self.config.get('long_pause_max', 30.0)
+                        extra_delay = pause_min + random.uniform(0, max(0, pause_max - pause_min))
                         self.log_signal.emit(f"Long session safety delay: {extra_delay:.1f}s", "INFO")
-                        time.sleep(extra_delay)
+                        
+                        # Use a loop for long sleep to remain responsive to stop signal
+                        sleep_start = time.time()
+                        while time.time() - sleep_start < extra_delay and self.is_running:
+                            time.sleep(0.5)
+                        
+                        if not self.is_running:
+                            break
                     
                     # Check post limit
                     if post_limit > 0 and matching_posts >= post_limit:
                         self.log_signal.emit(f"Reached the maximum number of posts limit ({post_limit})", "INFO")
                         break
             
-            # Ensure we show 100% progress at the end
-            self.progress_signal.emit(total_days, total_days, 'overall')
+            # Ensure we show full progress for this stage at the end
+            days_remaining = total_days - len(processed_days_set)
+            if days_remaining > 0:
+                self.completed_items += days_remaining
+            self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
             
             # Final summary message
             self.log_signal.emit(
@@ -969,7 +1047,7 @@ class DownloaderThread(QThread):
                     if not self.is_running:
                         return False, "Download cancelled"
                         
-                    self.progress_signal.emit(idx+1, highlight_count, 'overall')
+                    self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
             except Exception as e:
                 self.log_signal.emit(f"Error downloading highlights: {e}", "ERROR")
         
@@ -1022,7 +1100,14 @@ class DownloaderThread(QThread):
                             f"Processing story item {total_processed + 1}/{total_story_items} from {item.date}", 
                             "INFO"
                         )
-                        time.sleep(story_delay)
+                        
+                        # Use a loop for sleep to remain responsive to stop signal
+                        sleep_start = time.time()
+                        while time.time() - sleep_start < story_delay and self.is_running:
+                            time.sleep(0.5)
+                        
+                        if not self.is_running:
+                            return False, "Download cancelled"
                         
                         try:
                             L.download_storyitem(item, target=stories_dir)
@@ -1054,7 +1139,15 @@ class DownloaderThread(QThread):
             except Exception as e:
                 self.log_signal.emit(f"Error accessing stories: {e}", "ERROR")
         
-        return True, "Stories and highlights download completed"
+        # Final message based on what was actually processed
+        target_types = []
+        if self.config['download_highlights']:
+            target_types.append("highlights")
+        if self.config['download_stories'] and not self.config.get('only_highlights', False):
+            target_types.append("stories")
+            
+        final_msg = " and ".join(target_types).capitalize() + " download completed"
+        return True, final_msg
 
     def sanitize_path(self, path):
         """
@@ -1241,7 +1334,13 @@ class DownloaderThread(QThread):
             
             # Look for the specific story by ID
             for story in stories:
+                if not self.is_running:
+                    return False, "Download cancelled"
+                    
                 for item in story.get_items():
+                    if not self.is_running:
+                        return False, "Download cancelled"
+                        
                     if str(item.mediaid) == story_id:
                         found = True
                         self.log_signal.emit(f"Found story with ID {story_id}, downloading...", "INFO")
@@ -1327,6 +1426,9 @@ class DownloaderThread(QThread):
             highlights = L.get_highlights(profile)
             
             for highlight in highlights:
+                if not self.is_running:
+                    return False, "Download cancelled"
+                    
                 if str(highlight.unique_id) == highlight_id:
                     highlight_dir = os.path.join(highlights_dir, highlight.title)
                     os.makedirs(highlight_dir, exist_ok=True)
@@ -1379,6 +1481,175 @@ class DownloaderThread(QThread):
             self.logger.error(traceback.format_exc())
             return False, f"Error: {str(e)}"
 
+    def download_saved_posts(self, L, target_dir):
+        """
+        Download saved posts from the authenticated account.
+        
+        Args:
+            L: Authenticated Instaloader instance
+            target_dir: Base directory for downloads
+            
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            # Create saved posts directory
+            saved_dir = os.path.join(target_dir, "saved_posts")
+            os.makedirs(saved_dir, exist_ok=True)
+            
+            # Set the download path for this operation
+            L.dirname_pattern = saved_dir
+            
+            # Get configuration settings
+            ignore_date = self.config.get('ignore_date_range', False)
+            since_date = self.config['since_date']
+            until_date = self.config['until_date']
+            post_limit = self.config.get('max_posts', 0) if self.config.get('limit_posts', False) else 0
+            
+            # Convert dates if needed (reuse normalization logic if possible or duplicate)
+            if isinstance(since_date, str):
+                since_date = datetime.strptime(since_date, "%Y-%m-%d")
+            elif hasattr(since_date, 'timetuple'):
+                since_date = datetime.combine(since_date, datetime.min.time())
+                
+            if isinstance(until_date, str):
+                until_date = datetime.strptime(until_date, "%Y-%m-%d")
+            elif hasattr(until_date, 'timetuple'):
+                until_date = datetime.combine(until_date, datetime.max.time())
+            
+            self.log_signal.emit("Fetching saved posts...", "INFO")
+            
+            # Get the logged-in user's profile and fetch saved posts
+            profile = instaloader.Profile.from_username(L.context, L.context.username)
+            saved_posts = profile.get_saved_posts()
+            
+            total_processed = 0
+            downloaded = 0
+            skipped = 0
+            
+            # Since we can't easily get total count of saved posts without iterating,
+            # we'll use a placeholder or indefinite progress
+            estimated_total = 100 if post_limit <= 0 else post_limit
+            self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
+            
+            for post in saved_posts:
+                if not self.is_running:
+                    return False, "Download cancelled"
+                
+                self.pause_lock.wait()
+                if not self.is_running:
+                    break
+                
+                # Check date range first if not ignored
+                if not ignore_date:
+                    if post.date > until_date:
+                        continue # Skip posts newer than range (though saved order might differ from date order)
+                    if post.date < since_date:
+                        # Saved posts are usually ordered by save date, not post date. 
+                        # But we can't easily stop early based on post date, so we just skip.
+                        continue
+                
+                total_processed += 1
+                
+                # Update progress (dynamic)
+                self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
+                
+                # Determine target directory and filename pattern based on user choice
+                folder_mode = self.config.get('folder_structure_mode', 0)
+                owner_username = post.owner_username
+                
+                if folder_mode == 1:
+                    # Option 2: Single folder with prefix
+                    # saves to: saved_posts/{owner}_{date}_UTC.jpg
+                    target_dir = saved_dir
+                    # We inject owner username into the pattern
+                    L.filename_pattern = f"{owner_username}_{{date}}_UTC"
+                    check_pattern_prefix = f"{owner_username}_{post.date:%Y-%m-%d_%H-%M-%S}_UTC"
+                else:
+                    # Option 1: Separate folders (Default)
+                    # saves to: saved_posts/{owner}/{date}_UTC.jpg
+                    target_dir = os.path.join(saved_dir, owner_username)
+                    os.makedirs(target_dir, exist_ok=True)
+                    L.filename_pattern = "{date}_UTC"
+                    check_pattern_prefix = f"{post.date:%Y-%m-%d_%H-%M-%S}_UTC"
+                
+                # Check file existence
+                post_files_pattern = f"{check_pattern_prefix}*"
+                existing_files = glob.glob(os.path.join(target_dir, post_files_pattern))
+                
+                if existing_files and self.config.get('skip_existing', True):
+                    self.log_signal.emit(f"Skipping existing saved post from @{owner_username} ({post.date})", "INFO")
+                    skipped += 1
+                    self.completed_items += 1
+                    self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
+                    self.progress_signal.emit(100, 100, 'current')
+                    
+                    # Check limit
+                    if post_limit > 0 and total_processed >= post_limit:
+                        self.log_signal.emit(f"Reached limit of {post_limit} posts", "INFO")
+                        break
+                    continue
+                
+                # Download
+                delay = self.BASE_DELAY + random.uniform(0, self.JITTER)
+                self.log_signal.emit(f"Processing saved post {total_processed} from @{owner_username} ({post.date})", "INFO")
+                
+                # Use a loop for sleep to remain responsive to stop signal
+                sleep_start = time.time()
+                while time.time() - sleep_start < delay and self.is_running:
+                    time.sleep(0.5)
+                
+                if not self.is_running:
+                    return False, "Download cancelled"
+                
+                self.progress_signal.emit(0, 100, 'current')
+                
+                try:
+                    self.progress_signal.emit(25, 100, 'current')
+                    L.dirname_pattern = target_dir
+                    L.download_post(post, target=target_dir)
+                    self.progress_signal.emit(100, 100, 'current')
+                    
+                    # Emit new files
+                    pattern = f"{check_pattern_prefix}*"
+                    for file in glob.glob(os.path.join(target_dir, pattern)):
+                         if file.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.mp4')):
+                                self.file_downloaded_signal.emit(file)
+                    
+                    self.log_signal.emit(f"Successfully downloaded saved post from {post.date}", "INFO")
+                    downloaded += 1
+                    self.completed_items += 1
+                    self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
+                    
+                except Exception as e:
+                    self.log_signal.emit(f"Error downloading saved post: {e}", "ERROR")
+                
+                # Safety pause
+                if total_processed % 10 == 0 and random.random() < self.LONG_SESSION_CHANCE:
+                     pause_min = self.config.get('long_pause_min', 20.0)
+                     pause_max = self.config.get('long_pause_max', 30.0)
+                     extra_delay = pause_min + random.uniform(0, max(0, pause_max - pause_min))
+                     self.log_signal.emit(f"Safety pause: {extra_delay:.1f}s", "INFO")
+                     
+                     # Use a loop for sleep to remain responsive to stop signal
+                     sleep_start = time.time()
+                     while time.time() - sleep_start < extra_delay and self.is_running:
+                         time.sleep(0.5)
+                     
+                     if not self.is_running:
+                         break
+
+                # Check limit
+                if post_limit > 0 and total_processed >= post_limit:
+                    self.log_signal.emit(f"Reached limit of {post_limit} posts", "INFO")
+                    break
+            
+            return True, f"Saved posts download completed: {downloaded} downloaded, {skipped} skipped"
+
+        except Exception as e:
+            self.logger.error(traceback.format_exc())
+            return False, f"Error downloading saved posts: {str(e)}"
+
     def run(self):
         """
         Main execution method for the download thread.
@@ -1412,16 +1683,17 @@ class DownloaderThread(QThread):
             downloads_dir = os.path.join(download_dir, "downloads")
             os.makedirs(downloads_dir, exist_ok=True)
             
-            # Determine if we're downloading a single post or a profile
+            # Determine download mode
             is_single_post = self.config.get('download_single_post', False)
+            is_saved_posts = self.config.get('download_saved_posts', False)
             
-            # For single posts, use downloads_dir directly
-            # The download methods will create profile-based subdirectory
+            # Set up target directory
             if is_single_post:
-                # Use downloads_dir directly - actual directory based on post owner
                 target_dir = downloads_dir
+            elif is_saved_posts:
+                target_dir = downloads_dir # Will create saved_posts subdir
             else:
-                # For profiles, use the profile name as before
+                # Regular profile download
                 target_dir = os.path.join(downloads_dir, self.config['target_profile'])
                 
             target_dir = os.path.abspath(target_dir)
@@ -1461,9 +1733,6 @@ class DownloaderThread(QThread):
             
             # Check if we're still running after authentication
             if not self.is_running:
-                if self.is_stopped:
-                    self.stopped_signal.emit()
-                self.finished.emit()
                 os.chdir(original_cwd)
                 return
                 
@@ -1526,6 +1795,16 @@ class DownloaderThread(QThread):
                 except OSError:
                     pass # Ignore if not empty or can't delete
                 
+            elif is_saved_posts:
+                # Saved posts download mode
+                self.log_signal.emit("Starting Saved Posts download...", "INFO")
+                success, message = self.download_saved_posts(L, target_dir)
+                
+                self.log_signal.emit(message, "INFO" if success else "ERROR")
+                self.finished.emit()
+                os.chdir(original_cwd)
+                return
+
             else:
                 # Regular profile download mode - use existing code
                 try:
@@ -1544,10 +1823,11 @@ class DownloaderThread(QThread):
                         
                         # Add specific message about post limits if enabled
                         if self.config.get('limit_posts', False) and self.config.get('max_posts', 0) > 0:
-                            self.log_signal.emit(
-                                f"Post limit is set to {self.config.get('max_posts')} - only the most recent posts will be downloaded", 
-                                "INFO"
-                            )
+                            if not self.config.get('profile_pic_only', False):
+                                self.log_signal.emit(
+                                    f"Post limit is set to {self.config.get('max_posts')} - only the most recent posts will be downloaded", 
+                                    "INFO"
+                                )
                     else:
                         since_date = self.config['since_date']
                         until_date = self.config['until_date']
@@ -1560,6 +1840,9 @@ class DownloaderThread(QThread):
                     self.total_items = self.calculate_total_items(profile, L)
                     self.completed_items = 0
                     
+                    # Track successful download parts for final summary
+                    successful_parts = []
+                    
                     # Initialize progress bars
                     self.progress_signal.emit(0, self.total_items, 'overall')
                     self.progress_signal.emit(0, 100, 'current')
@@ -1567,7 +1850,15 @@ class DownloaderThread(QThread):
                     # Profile picture only download
                     if self.config.get('profile_pic_only', False):
                         success, message = self.download_profile_picture(L, profile, target_dir)
+                        if success:
+                            successful_parts.append("profile picture")
                         self.log_signal.emit(message, "INFO" if success else "ERROR")
+                        
+                        # Emit final unified summary
+                        if successful_parts:
+                            final_msg = f"{successful_parts[0].capitalize()} download completed"
+                            self.log_signal.emit(final_msg, "INFO")
+                            
                         os.chdir(original_cwd)  # Restore working directory
                         self.finished.emit()
                         return
@@ -1576,23 +1867,24 @@ class DownloaderThread(QThread):
                     if not self.config.get('only_stories', False) and not self.config.get('only_highlights', False):
                         # Always download profile picture first when downloading posts
                         success, message = self.download_profile_picture(L, profile, target_dir)
+                        if success:
+                            successful_parts.append("profile picture")
+                            self.completed_items += 1
+                            self.progress_signal.emit(self.completed_items, self.total_items, 'overall')
                         self.log_signal.emit(message, "INFO" if success else "ERROR")
                         
                         # Check if user stopped the download
                         if not self.is_running:
-                            if self.is_stopped:
-                                self.stopped_signal.emit()
                             os.chdir(original_cwd)
                             self.finished.emit()
                             return
                             
                         success, message = self.download_posts(L, profile, target_dir)
+                        if success:
+                            successful_parts.append("posts")
                         if not success:
                             self.log_signal.emit(message, "ERROR")
                             os.chdir(original_cwd)  # Restore working directory
-                            # Check if it was due to cancellation
-                            if not self.is_running and self.is_stopped:
-                                self.stopped_signal.emit()
                             self.finished.emit()
                             return
                     else:
@@ -1609,8 +1901,6 @@ class DownloaderThread(QThread):
                     
                     # Check if user stopped the download
                     if not self.is_running:
-                        if self.is_stopped:
-                            self.stopped_signal.emit()
                         os.chdir(original_cwd)
                         self.finished.emit()
                         return
@@ -1632,11 +1922,45 @@ class DownloaderThread(QThread):
                         # Restore original config
                         self.config = original_config
                         
-                        self.log_signal.emit(message, "INFO" if success else "ERROR")
+                        if success:
+                            successful_parts.append("highlights")
+                        # We don't log the partial message if we're doing a unified summary later
                     else:
                         # Regular download of stories and highlights based on checkboxes
-                        success, message = self.download_stories_and_highlights(L, profile, target_dir)
-                        self.log_signal.emit(message, "INFO" if success else "ERROR")
+                        # ONLY if at least one is enabled
+                        if self.config.get('download_stories', False) or self.config.get('download_highlights', False):
+                            success, message = self.download_stories_and_highlights(L, profile, target_dir)
+                            if success:
+                                if self.config.get('download_highlights', False):
+                                    successful_parts.append("highlights")
+                                if self.config.get('download_stories', False):
+                                    successful_parts.append("stories")
+                    
+                    # FINAL UNIFIED SUMMARY LOGGING
+                    # Only Profile Picture doesn't need to be in the "and" list if other things were done
+                    # but the user might want it. Let's filter it out if Posts/Stories were done to keep it clean,
+                    # UNLESS it was ONLY Profile Picture (handled in the block above)
+                    
+                    display_parts = [p for p in successful_parts if p != "profile picture"]
+                    if not display_parts and "profile picture" in successful_parts:
+                        display_parts = ["profile picture"]
+                        
+                    if display_parts:
+                        # Simple joiner logic for "A, B, and C"
+                        if len(display_parts) == 1:
+                            summary = display_parts[0].capitalize()
+                        elif len(display_parts) == 2:
+                            summary = f"{display_parts[0].capitalize()} and {display_parts[1]}"
+                        else:
+                            # oxford comma style as Requested: "posts, stories, and highlights"
+                            summary = f"{', '.join([p.capitalize() if i == 0 else p for i, p in enumerate(display_parts[:-1])])}, and {display_parts[-1]}"
+                        
+                        self.log_signal.emit(f"{summary} download completed", "INFO")
+                        
+                    # Final force to 100% to ensure UI consistency
+                    self.progress_signal.emit(self.total_items, self.total_items, 'overall')
+                    self.progress_signal.emit(100, 100, 'current')
+                    self.log_signal.emit("Download process completed!", "INFO")
                         
                 except instaloader.exceptions.ProfileNotExistsException:
                     self.log_signal.emit(
@@ -1681,9 +2005,10 @@ class ProfileCheckThread(QThread):
     """
     result_signal = pyqtSignal(bool, str)
     
-    def __init__(self, username):
+    def __init__(self, username, session_path=None):
         super().__init__()
         self.username = username
+        self.session_path = session_path
         self.logger = get_logger()  # Get logger instance
         
     def run(self):
@@ -1691,6 +2016,14 @@ class ProfileCheckThread(QThread):
             self.logger.info(f"Checking profile name for: {self.username}")
             # Create a temporary Instaloader instance
             L = instaloader.Instaloader(quiet=True, download_pictures=False, download_videos=False)
+            
+            # Load session if provided to improve check reliability
+            if self.session_path and os.path.exists(self.session_path):
+                try:
+                    L.load_session_from_file(self.username, self.session_path)
+                    self.logger.info(f"Using session for profile check: {self.session_path}")
+                except Exception as e:
+                    self.logger.warning(f"Could not load session for profile check: {e}")
             
             # Try to get the profile
             profile = instaloader.Profile.from_username(L.context, self.username)
@@ -1705,9 +2038,19 @@ class ProfileCheckThread(QThread):
         except instaloader.exceptions.ProfileNotExistsException:
             self.logger.error(f"Profile doesn't exist: {self.username}")
             self.result_signal.emit(False, "Profile doesn't exist")
-        except instaloader.exceptions.ConnectionException:
-            self.logger.error(f"Connection error while checking profile: {self.username}")
-            self.result_signal.emit(False, "Connection error")
+        except instaloader.exceptions.ConnectionException as e:
+            # If we see 404 in the connection error message, it's likely a missing profile
+            # that Instaloader's retrying failed to categorize as ProfileNotExistsException
+            error_msg = str(e).lower()
+            if "404" in error_msg or "not found" in error_msg:
+                self.logger.error(f"Profile not found (404 response): {self.username}")
+                self.result_signal.emit(False, "Profile not found")
+            elif "401" in error_msg or "unauthorized" in error_msg:
+                self.logger.error(f"Access unauthorized for profile: {self.username}")
+                self.result_signal.emit(False, "Login required to view")
+            else:
+                self.logger.error(f"Connection error while checking profile: {self.username} - {str(e)}")
+                self.result_signal.emit(False, "Network error or rate limited")
         except instaloader.exceptions.QueryReturnedNotFoundException:
             self.logger.error(f"Profile not found: {self.username}")
             self.result_signal.emit(False, "Profile not found")

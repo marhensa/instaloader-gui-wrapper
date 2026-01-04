@@ -22,7 +22,9 @@ A desktop application that provides a user-friendly graphical interface for down
 - **2FA Support** - Full two-factor authentication support
 - **Date Filtering** - Download content within specific date ranges
 - **Live Preview** - See downloaded content in real-time
-- **Dark Theme** - Modern dark-themed interface
+- **Login Status** - Clear visual indicators for login state (session vs credentials)
+- **Flexible Saving** - Choose between separate folders or single folder with prefixes for saved posts
+- **Dark Theme** - Modern PyQt6 dark-themed interface
 
 ## 🚀 Quick Start
 
@@ -62,6 +64,27 @@ Download the latest release from [Releases](https://github.com/marhensa/instaloa
 
 ### Download Structure
 
+**Option 1: Separate Folders (Default)**
+```
+downloads/
+└── saved_posts/
+    ├── username1/
+    │   ├── 2024-01-01_UTC.jpg
+    │   └── ...
+    └── username2/
+        └── ...
+```
+
+**Option 2: Single Folder with Prefix**
+```
+downloads/
+└── saved_posts/
+    ├── username1_2024-01-01_UTC.jpg
+    ├── username2_2024-01-02_UTC.jpg
+    └── ...
+```
+
+**Standard Downloads:**
 ```
 downloads/
 └── username/

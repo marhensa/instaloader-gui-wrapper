@@ -19,7 +19,7 @@ Example:
     $ python run.py
 
 Author: @marhensa
-Version: 1.3
+Version: 1.4
 License: MIT License
 
 Copyright (c) 2026 marhensa

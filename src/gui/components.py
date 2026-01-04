@@ -12,7 +12,7 @@ Classes:
     LogViewer: A specialized text display widget for showing color-coded log messages
 
 Author: @marhensa
-Version: 1.3
+Version: 1.4
 License: MIT License
 
 Copyright (c) 2026 marhensa

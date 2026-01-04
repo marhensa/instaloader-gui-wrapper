@@ -12,7 +12,8 @@ and application information, along with a log viewer and download preview panel.
 Features:
 - User authentication via credentials or session files
 - Two-factor authentication support
-- Profile and post download configuration
+- Profile, saved posts, and individual post download configuration
+- Flexible folder structure options for saved posts
 - Progress tracking with real-time feedback
 - Content preview for downloaded media
 - Anti-detection timing system configuration
@@ -22,7 +23,7 @@ Classes:
     InstaloaderGUIWrapper: Main application window class that manages the entire UI
 
 Author: @marhensa
-Version: 1.3
+Version: 1.4
 License: MIT License
 
 Copyright (c) 2026 marhensa
@@ -43,7 +44,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                            QProgressBar, QLabel, QFileDialog, QDateEdit,
                            QGroupBox, QSizePolicy, QDoubleSpinBox, QSpinBox,
                            QTabWidget, QMessageBox, QFrame, QDialog, QInputDialog,
-                           QApplication)
+                           QApplication, QComboBox, QStackedWidget)
 from PyQt6.QtCore import (Qt, QDate, pyqtSignal, QEventLoop, QTimer, QMetaObject, 
                          Q_ARG, QThread, pyqtSlot)
 from PyQt6.QtGui import QPixmap, QIcon, QFont, QIntValidator
@@ -55,7 +56,8 @@ from ..config.constants import (DEFAULT_BASE_DELAY, DEFAULT_JITTER,
                               DEFAULT_STORY_MULTIPLIER, DEFAULT_CRITICAL_WAIT, 
                               DEFAULT_LONG_SESSION_CHANCE, DEFAULT_REQUEST_TIMEOUT,
                               SUPPORTED_MEDIA_FORMATS, APP_NAME, APP_VERSION, 
-                              INSTALOADER_VERSION, APP_ROOT, EXEC_DIR, get_resource_path)
+                              INSTALOADER_VERSION, APP_ROOT, EXEC_DIR, get_resource_path,
+                              DEFAULT_LONG_PAUSE_MIN, DEFAULT_LONG_PAUSE_MAX)
 from ..core.logger import get_logger
 
 class InstaloaderGUIWrapper(QMainWindow):
@@ -181,14 +183,16 @@ class InstaloaderGUIWrapper(QMainWindow):
         self.setup_advanced_settings(advanced_layout)
         self.setup_about_tab(about_layout)
         
-        layout.addWidget(self.tabs)
+        self.tabs.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        layout.addWidget(self.tabs, 0)  # stretch=0, won't expand
         
         # Add progress tracking section
         self.setup_progress_bars(layout)
         
-        # Add log viewer at the bottom
+        # Add log viewer at the bottom - should expand to fill remaining space
         self.log_viewer = LogViewer()
-        layout.addWidget(self.log_viewer)
+        self.log_viewer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self.log_viewer, 1)  # stretch=1, will expand
         
         # Custom style for group boxes to improve appearance
         left_panel.setStyleSheet("QGroupBox { padding-top: 12px; margin-top: 5px; }")
@@ -249,6 +253,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         login_layout = QHBoxLayout()
         self.username = QLineEdit()
         self.username.setPlaceholderText("Instagram Username")
+        self.username.textChanged.connect(self._update_will_login_label)
         self.password = QLineEdit()
         self.password.setPlaceholderText("Instagram Password")
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
@@ -327,65 +332,102 @@ class InstaloaderGUIWrapper(QMainWindow):
         cred_layout.addLayout(session_layout)
         
         cred_group.setLayout(cred_layout)
+        cred_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         layout.addWidget(cred_group)
 
         # Target profile/post selection group
         target_group = QGroupBox("📥 Download Target")
+        target_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         target_layout = QVBoxLayout()
         
-        # Profile selection row with name verification
-        profile_layout = QHBoxLayout()
+        # Download Mode Selection
+        mode_layout = QHBoxLayout()
+        mode_label = QLabel("Download Mode:")
+        self.download_mode = QComboBox()
+        self.download_mode.setMinimumWidth(130)  # Prevent text truncation
+        self.download_mode.addItems(["Target Profile", "Saved Posts", "Single Post"])
+        self.download_mode.currentIndexChanged.connect(self.change_download_mode)
+        
+        # User info label (updated when session is selected)
+        self.logged_in_label = QLabel("")
+        self.logged_in_label.setStyleSheet("color: #808080; font-style: italic;")
+        
+        mode_layout.addWidget(mode_label)
+        mode_layout.addWidget(self.download_mode)
+        mode_layout.addWidget(self.logged_in_label)
+        mode_layout.addStretch()
+        target_layout.addLayout(mode_layout)
+
+        # === STACKED WIDGET FOR MODE-SPECIFIC CONTENT ===
+        self.mode_stack = QStackedWidget()
+        self.mode_stack.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        
+        # --- Page 0: Target Profile ---
+        profile_page = QWidget()
+        profile_page_layout = QVBoxLayout(profile_page)
+        profile_page_layout.setContentsMargins(0, 0, 0, 0)
+        
+        profile_row = QHBoxLayout()
         profile_label = QLabel("Target Profile:")
         self.target_profile = QLineEdit()
         self.target_profile.setPlaceholderText("username without @")
-        
         self.check_name_button = QPushButton("Check Name")
         self.check_name_button.clicked.connect(self.check_profile_name)
         self.check_name_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        
-        # Display area for profile verification results
         self.profile_name_display = QLabel("")
         
-        profile_layout.addWidget(profile_label, 0)
-        profile_layout.addWidget(self.target_profile, 3)  # Wider field for better visibility
-        profile_layout.addWidget(self.check_name_button, 0)
-        profile_layout.addWidget(self.profile_name_display, 2)
-        target_layout.addLayout(profile_layout)
+        profile_row.addWidget(profile_label, 0)
+        profile_row.addWidget(self.target_profile, 3)
+        profile_row.addWidget(self.check_name_button, 0)
+        profile_row.addWidget(self.profile_name_display, 2)
+        profile_page_layout.addLayout(profile_row)
         
-        # Single post URL input row
-        url_layout = QHBoxLayout()
-        self.download_single_post = QCheckBox("Download Single Post")
-        self.download_single_post.stateChanged.connect(self.toggle_single_post)
+        self.mode_stack.addWidget(profile_page)  # Index 0
         
+        # --- Page 1: Saved Posts (empty - no extra input needed) ---
+        saved_page = QWidget()
+        saved_page_layout = QVBoxLayout(saved_page)
+        saved_page_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.saved_info = QLabel("📁 Saved posts will be downloaded to: downloads/saved_posts/{post_owner}/")
+        self.saved_info.setStyleSheet("color: #808080; font-style: italic;")
+        saved_page_layout.addWidget(self.saved_info)
+        
+        self.mode_stack.addWidget(saved_page)  # Index 1
+        
+        # --- Page 2: Single Post ---
+        single_page = QWidget()
+        single_page_layout = QVBoxLayout(single_page)
+        single_page_layout.setContentsMargins(0, 0, 0, 0)
+        
+        url_row = QHBoxLayout()
         url_label = QLabel("URL:")
         self.post_url = QLineEdit()
         self.post_url.setPlaceholderText("https://www.instagram.com/p/xyzabc123/ (supports posts/reels/stories/highlights)")
-        self.post_url.setEnabled(False)  # Disabled by default
+        url_row.addWidget(url_label)
+        url_row.addWidget(self.post_url)
+        single_page_layout.addLayout(url_row)
         
-        url_layout.addWidget(self.download_single_post)
-        url_layout.addWidget(url_label)
-        url_layout.addWidget(self.post_url)
-        target_layout.addLayout(url_layout)
+        self.mode_stack.addWidget(single_page)  # Index 2
         
-        # Download location selection
+        target_layout.addWidget(self.mode_stack)
+        
+        # Download location selection (always visible)
         save_layout = QHBoxLayout()
         
         dir_label = QLabel("📂 Download Location:")
         self.dir_path = QLineEdit()
         self.dir_path.setReadOnly(True)
-        # Auto-populate with default downloads directory
-        # Using EXEC_DIR to ensure it points to the AppImage/Exe location, not temp dir
         self.dir_path.setText(EXEC_DIR)
         self.dir_button = QPushButton("Browse...")
         self.dir_button.clicked.connect(self.select_directory)
         
-        # Option to skip existing files
         self.skip_existing = QCheckBox("Skip Existing Files")
-        self.skip_existing.setChecked(True)  # Enabled by default
+        self.skip_existing.setChecked(True)
         self.skip_existing.setToolTip("Skip downloading files that already exist locally")
         
         save_layout.addWidget(dir_label)
-        save_layout.addWidget(self.dir_path, 3)  # Wider field for better path visibility
+        save_layout.addWidget(self.dir_path, 3)
         save_layout.addWidget(self.dir_button)
         save_layout.addWidget(self.skip_existing)
         target_layout.addLayout(save_layout)
@@ -400,7 +442,8 @@ class InstaloaderGUIWrapper(QMainWindow):
         Args:
             layout (QVBoxLayout): Layout to add the options components to
         """
-        options_group = QGroupBox("🔽 Download Options (for Target Profile)")
+        self.options_group = QGroupBox("🔽 Download Options (for Target Profile)")
+        self.options_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         options_layout = QVBoxLayout()
         
         # Date range selection
@@ -441,6 +484,42 @@ class InstaloaderGUIWrapper(QMainWindow):
         date_layout.addStretch(1)  # For centering
         
         options_layout.addLayout(date_layout)
+        
+        # Info note about date range (only for Saved Posts mode)
+        self.date_info = QLabel("ℹ️ Date range filters by original post upload date, not when you saved it")
+        self.date_info.setStyleSheet("color: #808080; font-style: italic; font-size: 11px;")
+        self.date_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.date_info.setVisible(False)  # Hidden by default, shown only for Saved Posts
+        options_layout.addWidget(self.date_info)
+        
+        # Folder Organization Option (Saved Posts only)
+        self.folder_structure_container = QWidget()
+        fs_layout = QVBoxLayout(self.folder_structure_container)
+        fs_layout.setContentsMargins(0, 5, 0, 5)
+        
+        fs_header = QHBoxLayout()
+        # fs_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        fs_label = QLabel("Folder Structure:")
+        self.folder_structure_mode = QComboBox()
+        self.folder_structure_mode.setMinimumWidth(260)  # Increased width to fit text
+        self.folder_structure_mode.addItems(["Separate Folders (Recommended)", "Single Folder with Prefix"])
+        self.folder_structure_mode.currentIndexChanged.connect(self._update_folder_structure_desc)
+        
+        fs_header.addStretch(1)
+        fs_header.addWidget(fs_label)
+        fs_header.addWidget(self.folder_structure_mode)
+        fs_header.addStretch(1)
+        
+        self.folder_structure_desc = QLabel("downloads/saved_posts/{owner}/{filename}")
+        self.folder_structure_desc.setStyleSheet("color: #808080; font-style: italic; font-size: 11px;")
+        self.folder_structure_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        fs_layout.addLayout(fs_header)
+        fs_layout.addWidget(self.folder_structure_desc)
+        
+        self.folder_structure_container.setVisible(False)
+        options_layout.addWidget(self.folder_structure_container)
         
         # Add max posts limit option
         limit_layout = QHBoxLayout()
@@ -500,8 +579,8 @@ class InstaloaderGUIWrapper(QMainWindow):
         self.only_highlights.stateChanged.connect(self.handle_only_highlights)
         self.profile_pic_only.stateChanged.connect(self.handle_profile_pic_only)
         
-        options_group.setLayout(options_layout)
-        layout.addWidget(options_group)
+        self.options_group.setLayout(options_layout)
+        layout.addWidget(self.options_group)
         
         # Add control button group below options group
         self.control_group = QHBoxLayout()
@@ -565,6 +644,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         base_delay_label = QLabel("Base Delay (seconds):")
         base_delay_label.setToolTip("Time to wait between each posts downloads")
         base_delay_layout.addWidget(base_delay_label)
+        base_delay_layout.addStretch()
         self.base_delay = QDoubleSpinBox()
         self.base_delay.setRange(1, 60)
         self.base_delay.setValue(DEFAULT_BASE_DELAY)
@@ -582,6 +662,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         jitter_label = QLabel("Random Jitter (seconds):")
         jitter_label.setToolTip("Random additional delay to appear as human behavior")
         jitter_layout.addWidget(jitter_label)
+        jitter_layout.addStretch()
         self.jitter = QDoubleSpinBox()
         self.jitter.setRange(0, 20)
         self.jitter.setValue(DEFAULT_JITTER)
@@ -599,6 +680,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         story_label = QLabel("Story Delay Multiplier:")
         story_label.setToolTip("Extra time caution for story downloads")
         story_layout.addWidget(story_label)
+        story_layout.addStretch()
         self.story_multiplier = QDoubleSpinBox()
         self.story_multiplier.setRange(1, 10)
         self.story_multiplier.setValue(DEFAULT_STORY_MULTIPLIER)
@@ -616,6 +698,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         critical_label = QLabel("Critical Wait (minutes):")
         critical_label.setToolTip("Timeout duration after errors or temporary ban")
         critical_layout.addWidget(critical_label)
+        critical_layout.addStretch()
         self.critical_wait = QSpinBox()
         self.critical_wait.setRange(1, 120)
         self.critical_wait.setValue(DEFAULT_CRITICAL_WAIT)
@@ -631,6 +714,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         session_label = QLabel("Long Session Chance (0-1):")
         session_label.setToolTip("Probability of taking a longer break")
         session_layout.addWidget(session_label)
+        session_layout.addStretch()
         self.long_session_chance = QDoubleSpinBox()
         self.long_session_chance.setRange(0, 1)
         self.long_session_chance.setValue(DEFAULT_LONG_SESSION_CHANCE)
@@ -642,12 +726,41 @@ class InstaloaderGUIWrapper(QMainWindow):
         session_info = QLabel("Probability (0-1) that a longer break will be taken between downloads")
         session_info.setStyleSheet("color: #808080; font-style: italic;")
         session_info.setWordWrap(True)
+
+        # Long pause duration settings
+        pause_duration_layout = QHBoxLayout()
+        pause_duration_label = QLabel("Long Pause Duration (min-max sec):")
+        pause_duration_label.setToolTip("Minimum and maximum seconds for the longer break")
+        pause_duration_layout.addWidget(pause_duration_label)
+        pause_duration_layout.addStretch()
+        
+        self.long_pause_min = QDoubleSpinBox()
+        self.long_pause_min.setRange(5, 300)
+        self.long_pause_min.setValue(DEFAULT_LONG_PAUSE_MIN)
+        self.long_pause_min.setDecimals(1)
+        self.long_pause_min.setSingleStep(1.0)
+        
+        self.long_pause_max = QDoubleSpinBox()
+        self.long_pause_max.setRange(5, 600)
+        self.long_pause_max.setValue(DEFAULT_LONG_PAUSE_MAX)
+        self.long_pause_max.setDecimals(1)
+        self.long_pause_max.setSingleStep(1.0)
+        
+        pause_duration_layout.addWidget(self.long_pause_min)
+        pause_duration_layout.addWidget(QLabel("-"))
+        pause_duration_layout.addWidget(self.long_pause_max)
+        
+        # Explanation text for pause duration
+        pause_duration_info = QLabel("The random range of seconds for the longer safety break")
+        pause_duration_info.setStyleSheet("color: #808080; font-style: italic;")
+        pause_duration_info.setWordWrap(True)
         
         # Request timeout setting
         timeout_layout = QHBoxLayout()
         timeout_label = QLabel("Request Timeout (seconds):")
         timeout_label.setToolTip("Maximum time to wait for server response")
         timeout_layout.addWidget(timeout_label)
+        timeout_layout.addStretch()
         self.request_timeout = QSpinBox()
         self.request_timeout.setRange(30, 600)
         self.request_timeout.setValue(DEFAULT_REQUEST_TIMEOUT)
@@ -659,12 +772,12 @@ class InstaloaderGUIWrapper(QMainWindow):
         timeout_info.setStyleSheet("color: #808080; font-style: italic;")
         timeout_info.setWordWrap(True)
 
-        # Add all parameter groups to timing layout
         parameter_layouts = [
             (base_delay_layout, base_delay_info),
             (jitter_layout, jitter_info),
             (story_layout, story_info),
             (session_layout, session_info),
+            (pause_duration_layout, pause_duration_info),
             (timeout_layout, timeout_info),
             (critical_layout, critical_info)  # Moved to the end of the list
         ]
@@ -843,6 +956,8 @@ class InstaloaderGUIWrapper(QMainWindow):
         self.story_multiplier.setValue(DEFAULT_STORY_MULTIPLIER)
         self.critical_wait.setValue(DEFAULT_CRITICAL_WAIT)
         self.long_session_chance.setValue(DEFAULT_LONG_SESSION_CHANCE)
+        self.long_pause_min.setValue(DEFAULT_LONG_PAUSE_MIN)
+        self.long_pause_max.setValue(DEFAULT_LONG_PAUSE_MAX)
         self.request_timeout.setValue(DEFAULT_REQUEST_TIMEOUT)
         self.log_message("Advanced settings reset to default values", "INFO")
         self.save_settings()
@@ -870,9 +985,14 @@ class InstaloaderGUIWrapper(QMainWindow):
             self.username.setText("")
             self.password.setText("")
             self.save_session.setChecked(False)  # Uncheck save_session when using session file
+            # Update label from session if already selected
+            if self.session_path.text():
+                self._update_saved_user_info(self.session_path.text())
         else:
             self.session_path.setText("")
             self.save_session.setChecked(True)  # Re-check save_session when using credentials
+            # Clear label - will be updated after successful login
+            self.logged_in_label.setText("")
 
     def select_session_file(self):
         """
@@ -900,6 +1020,58 @@ class InstaloaderGUIWrapper(QMainWindow):
         if file_path:
             self.session_path.setText(os.path.normpath(file_path))
             self.use_session.setChecked(True)  # Automatically check the "Use Session File" checkbox
+            
+            # Update saved posts user info label
+            self._update_saved_user_info(file_path)
+
+    def _update_saved_user_info(self, session_path):
+        """
+        Extract username from session file and update the saved_user_info label.
+        """
+        import pickle
+        username = None
+        
+        try:
+            with open(session_path, 'rb') as f:
+                session_data = pickle.load(f)
+            
+            # Handle different session data structures
+            cookies = []
+            if isinstance(session_data, dict):
+                cookies = session_data.values()
+            elif hasattr(session_data, '__iter__'):
+                cookies = session_data
+                
+            # Try to find username from session cookies
+            for cookie in cookies:
+                if hasattr(cookie, 'name') and cookie.name == 'ds_user':
+                    username = cookie.value
+                    break
+        except Exception as e:
+            self.logger.warning(f"Could not extract username from session: {e}")
+        
+        if not username:
+            # Fallback to filename-based extraction
+            basename = os.path.splitext(os.path.basename(session_path))[0]
+            if basename.startswith('session-'):
+                username = basename[8:]
+            else:
+                username = basename
+        
+        self.logged_in_label.setText(f"(logged in as @{username})")
+        self.logged_in_label.setStyleSheet("color: #4aff4a;")  # Green for confirmed
+
+    def _update_will_login_label(self, text):
+        """
+        Update label to show pending login state when username is typed.
+        Only updates if not using session file.
+        """
+        if not self.use_session.isChecked():
+            if text:
+                self.logged_in_label.setText(f"(will login as @{text})")
+                self.logged_in_label.setStyleSheet("color: #ffcc00;")  # Yellow for pending
+            else:
+                self.logged_in_label.setText("")
 
     def select_directory(self):
         """
@@ -910,6 +1082,15 @@ class InstaloaderGUIWrapper(QMainWindow):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Download Directory", APP_ROOT)
         if dir_path:
             self.dir_path.setText(os.path.normpath(dir_path))
+
+    def _update_folder_structure_desc(self, index):
+        """Update the description label for folder structure option."""
+        if index == 0:
+            self.folder_structure_desc.setText("downloads/saved_posts/{owner}/{filename}")
+            self.saved_info.setText("📁 Saved posts will be downloaded to: downloads/saved_posts/{post_owner}/")
+        else:
+            self.folder_structure_desc.setText("downloads/saved_posts/{owner}_{filename}")
+            self.saved_info.setText("📁 Saved posts will be downloaded to: downloads/saved_posts/")
 
     def toggle_date_range(self, state):
         """
@@ -933,6 +1114,7 @@ class InstaloaderGUIWrapper(QMainWindow):
             self.download_highlights.setChecked(False)
             self.download_highlights.setEnabled(False)
             self.profile_pic_only.setChecked(False)
+            self.profile_pic_only.setEnabled(False)
             self.only_highlights.setChecked(False)
             self.only_highlights.setEnabled(False)
             self.download_stories.setChecked(True)
@@ -940,11 +1122,24 @@ class InstaloaderGUIWrapper(QMainWindow):
             # Stories are always current (24h max), so date range must be ignored
             self.ignore_date_range.setChecked(True)
             self.ignore_date_range.setEnabled(False)
+            
+            # Disable post limit options
+            self.limit_posts.setChecked(False)
+            self.limit_posts.setEnabled(False)
+            self.max_posts.setEnabled(False)
         else:
             self.download_highlights.setEnabled(True)
             self.download_stories.setEnabled(True)
+            self.download_stories.setChecked(False)  # User requested uncheck
             self.only_highlights.setEnabled(True)
+            self.profile_pic_only.setEnabled(True)
             self.ignore_date_range.setEnabled(True)
+            self.ignore_date_range.setChecked(True)
+            self.toggle_date_range(True)
+            
+            # Re-enable post limit options if no other specialized mode is active
+            if not self.only_highlights.isChecked() and not self.profile_pic_only.isChecked():
+                self.limit_posts.setEnabled(True)
 
     def handle_only_highlights(self, state):
         """
@@ -959,15 +1154,34 @@ class InstaloaderGUIWrapper(QMainWindow):
             self.download_stories.setChecked(False)
             self.download_stories.setEnabled(False)
             self.profile_pic_only.setChecked(False)
+            self.profile_pic_only.setEnabled(False)
             self.only_stories.setChecked(False)
             self.only_stories.setEnabled(False)
             self.download_highlights.setChecked(True)
             self.download_highlights.setEnabled(False)
+            
+            # Highlights CAN be filtered by date, as they are saved stories with upload dates.
+            # So we keep ignore_date_range enabled for user choice.
+            self.ignore_date_range.setEnabled(True)
+            self.toggle_date_range(self.ignore_date_range.isChecked())
+            
+            # Disable post limit options (not currently applicable to highlights)
+            self.limit_posts.setChecked(False)
+            self.limit_posts.setEnabled(False)
+            self.max_posts.setEnabled(False)
         else:
             self.download_stories.setEnabled(True)
             self.download_highlights.setEnabled(True)
+            self.download_highlights.setChecked(False) # User requested uncheck
             self.only_stories.setEnabled(True)
+            self.profile_pic_only.setEnabled(True)
             self.ignore_date_range.setEnabled(True)
+            self.ignore_date_range.setChecked(True)
+            self.toggle_date_range(True)
+            
+            # Re-enable post limit options if no other specialized mode is active
+            if not self.only_stories.isChecked() and not self.profile_pic_only.isChecked():
+                self.limit_posts.setEnabled(True)
 
     def handle_profile_pic_only(self, state):
         """
@@ -995,10 +1209,21 @@ class InstaloaderGUIWrapper(QMainWindow):
             # Profile pics are always current, so date range must be ignored
             self.ignore_date_range.setChecked(True)
             self.date_widget.setEnabled(False)
+            
+            # Disable post limit options
+            self.limit_posts.setChecked(False)
+            self.limit_posts.setEnabled(False)
+            self.max_posts.setEnabled(False)
         else:
             for checkbox in checkboxes:
                 checkbox.setEnabled(True)
             self.toggle_date_range(self.ignore_date_range.isChecked())
+            
+            # Re-enable post limit options if no other specialized mode is active
+            if not self.only_stories.isChecked() and not self.only_highlights.isChecked():
+                self.limit_posts.setEnabled(True)
+            # max_posts state is handled by limit_posts signal, so we don't need to explicitly enable it here
+            # (it stays disabled if limit_posts is unchecked)
 
     def save_settings(self):
         """
@@ -1012,6 +1237,8 @@ class InstaloaderGUIWrapper(QMainWindow):
             'story_multiplier': self.story_multiplier.value(),
             'critical_wait': self.critical_wait.value(),
             'long_session_chance': self.long_session_chance.value(),
+            'long_pause_min': self.long_pause_min.value(),
+            'long_pause_max': self.long_pause_max.value(),
             'request_timeout': self.request_timeout.value(),
         }
         
@@ -1123,7 +1350,6 @@ class InstaloaderGUIWrapper(QMainWindow):
         if self.is_downloading:
             self.is_downloading = False
             self.reset_ui_state()
-            self.log_message("Download process completed!", "INFO")
 
     def validate_config(self, config):
         """
@@ -1138,7 +1364,7 @@ class InstaloaderGUIWrapper(QMainWindow):
         Returns:
             bool: True if the configuration is valid, False otherwise
         """
-        is_single_post = self.download_single_post.isChecked()
+        is_single_post = config.get('download_single_post', False)
         
         # Check date range validity if date filtering is enabled
         if not self.ignore_date_range.isChecked():
@@ -1190,8 +1416,9 @@ class InstaloaderGUIWrapper(QMainWindow):
                 )
                 return False
         else:
-            # Only check for target profile when not in single post mode
-            if not config['target_profile']:
+            # Only check for target profile when in Target Profile mode (not single post or saved posts)
+            is_saved_posts = config.get('download_saved_posts', False)
+            if not is_saved_posts and not config['target_profile']:
                 self.log_message("Target profile name is required!", "ERROR")
                 return False
 
@@ -1238,6 +1465,13 @@ class InstaloaderGUIWrapper(QMainWindow):
         log_method = getattr(self.logger, level.lower(), None)
         if log_method:
             log_method(message)
+        
+        # Update logged_in_label when login is successful (for credential login)
+        if "Login successful" in message and not self.use_session.isChecked():
+            username = self.username.text().strip()
+            if username:
+                self.logged_in_label.setText(f"(logged in as @{username})")
+                self.logged_in_label.setStyleSheet("color: #4aff4a;")  # Green
 
     def update_preview(self, file_path):
         """Update preview with downloaded file."""
@@ -1419,6 +1653,52 @@ class InstaloaderGUIWrapper(QMainWindow):
         # Display in the info text area
         self.image_info.setText(info_text)
 
+    def change_download_mode(self, index):
+        """
+        Handle download mode changes using QStackedWidget.
+        
+        Modes:
+        0: Target Profile
+        1: Saved Posts
+        2: Single Post
+        """
+        self.mode_stack.setCurrentIndex(index)
+        
+        if index == 0:  # Target Profile
+            self.options_group.setVisible(True)
+            self.options_group.setTitle("🔽 Download Options (for Target Profile)")
+            # Enable and show profile-specific options
+            for cb in [self.download_highlights, self.download_stories,
+                       self.only_highlights, self.only_stories, self.profile_pic_only]:
+                cb.setVisible(True)
+                cb.setEnabled(True)
+        elif index == 1:  # Saved Posts
+            self.options_group.setVisible(True)
+            self.options_group.setTitle("🔽 Download Options (for Saved Posts)")
+            # Hide, uncheck, and disable profile-specific options
+            for cb in [self.download_highlights, self.download_stories,
+                       self.only_highlights, self.only_stories, self.profile_pic_only]:
+                cb.setChecked(False)
+                cb.setEnabled(False)
+                cb.setVisible(False)
+        elif index == 2:  # Single Post
+            self.options_group.setVisible(False)
+            self.options_group.setMaximumHeight(0)
+        
+        # Restore max height when options are visible
+        if index in [0, 1]:
+            self.options_group.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+        
+        # Show date info note only for Saved Posts mode
+        self.date_info.setVisible(index == 1)
+        
+        # Show folder structure option only for Saved Posts mode
+        self.folder_structure_container.setVisible(index == 1)
+        
+        # Force layout recalculation
+        self.basic_tab.updateGeometry()
+        QApplication.processEvents()
+
     def get_config(self):
         """
         Get the current configuration from the UI components.
@@ -1426,13 +1706,15 @@ class InstaloaderGUIWrapper(QMainWindow):
         Returns:
             dict: The current configuration dictionary
         """
+        mode = self.download_mode.currentText()
+        
         config = {
             'use_session': self.use_session.isChecked(),
             'session_path': self.session_path.text(),
             'username': self.username.text(),
             'password': self.password.text(),
             'save_session': self.save_session.isChecked(),
-            'target_profile': self.target_profile.text(),
+            'target_profile': self.target_profile.text() if mode == "Target Profile" else self.username.text(),
             'download_dir': self.dir_path.text(),
             'download_highlights': self.download_highlights.isChecked(),
             'download_stories': self.download_stories.isChecked(),
@@ -1447,14 +1729,19 @@ class InstaloaderGUIWrapper(QMainWindow):
             'story_multiplier': self.story_multiplier.value(),
             'critical_wait': self.critical_wait.value() * 60,  # Convert to seconds
             'long_session_chance': self.long_session_chance.value(),
+            'long_pause_min': self.long_pause_min.value(),
+            'long_pause_max': self.long_pause_max.value(),
             'skip_existing': self.skip_existing.isChecked(),
             'request_timeout': self.request_timeout.value(),
-            # Add new fields for single post download
-            'download_single_post': self.download_single_post.isChecked(),
+            # Add new fields for download modes
+            'download_mode': mode,
+            'download_single_post': mode == "Single Post",
+            'download_saved_posts': mode == "Saved Posts",
             'post_url': self.post_url.text().strip(),
             # Add post limit options
             'limit_posts': self.limit_posts.isChecked(),
             'max_posts': self.max_posts.value() if self.limit_posts.isChecked() else 0,
+            'folder_structure_mode': self.folder_structure_mode.currentIndex(),  # 0=Separate, 1=Single with Prefix
         }
         
         # Extract post ID if we're in single post mode
@@ -1521,10 +1808,10 @@ class InstaloaderGUIWrapper(QMainWindow):
             reply = QMessageBox.question(
                 self, 'Confirm Exit',
                 'A download is in progress. Are you sure you want to quit?',
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
             )
-            if reply == QMessageBox.No:
+            if reply == QMessageBox.StandardButton.No:
                 self.logger.info("Shutdown cancelled - download in progress")
                 event.ignore()
                 return
@@ -1734,7 +2021,8 @@ class InstaloaderGUIWrapper(QMainWindow):
             self.profile_check_thread.deleteLater()
         
         # Create new thread
-        self.profile_check_thread = ProfileCheckThread(username)
+        session_path = self.session_path.text().strip() if self.use_session.isChecked() else None
+        self.profile_check_thread = ProfileCheckThread(username, session_path)
         self.profile_check_thread.result_signal.connect(self.display_profile_result)
         self.profile_check_thread.finished.connect(self.profile_check_finished)
         self.profile_check_thread.start()
@@ -1760,7 +2048,6 @@ class InstaloaderGUIWrapper(QMainWindow):
         if success:
             self.profile_name_display.setText(f"✓ {result}")
             self.profile_name_display.setStyleSheet("color: #4CAF50;")  # Green text
-            self.log_message(f"Profile found: {self.target_profile.text().strip()} ({result})", "INFO")
         else:
             self.profile_name_display.setText(f"✗ {result}")
             self.profile_name_display.setStyleSheet("color: #FF5252;")  # Red text
@@ -1796,11 +2083,11 @@ class InstaloaderGUIWrapper(QMainWindow):
         reply = QMessageBox.question(
             self, 'Confirm Stop',
             'Are you sure you want to stop the download?',
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
         
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             self.downloader_thread.stop()
             self.reset_ui_state()
             
@@ -1814,6 +2101,5 @@ class InstaloaderGUIWrapper(QMainWindow):
         """Handle download being manually stopped by user"""
         self.is_downloading = False
         self.reset_ui_state()
-        self.logger.info("Download stopped by user!")
         self.log_message("Download stopped by user", "WARNING")
         # Don't reset progress bars completely to show how far we got

@@ -17,7 +17,7 @@ Having these constants in a centralized location makes it easier to modify appli
 behavior without having to search through multiple files.
 
 Author: @marhensa
-Version: 1.3
+Version: 1.4
 License: MIT License
 
 Copyright (c) 2026 marhensa
@@ -44,7 +44,7 @@ def get_resource_path(relative_path):
 
 # Application metadata and directory structure
 APP_NAME = "Instaloader GUI Wrapper"
-APP_VERSION = "1.3"
+APP_VERSION = "1.4"
 
 # Get instaloader version dynamically
 try:
@@ -79,6 +79,8 @@ DEFAULT_JITTER = 3.0           # Random time addition to appear more human-like
 DEFAULT_STORY_MULTIPLIER = 2.5 # Stories are rate-limited more strictly
 DEFAULT_CRITICAL_WAIT = 30     # Minutes to wait after encountering rate limits
 DEFAULT_LONG_SESSION_CHANCE = 0.25  # Probability of taking a longer pause
+DEFAULT_LONG_PAUSE_MIN = 20.0       # Minimum duration of a safety break in seconds
+DEFAULT_LONG_PAUSE_MAX = 30.0       # Maximum duration of a safety break in seconds
 DEFAULT_REQUEST_TIMEOUT = 300  # Request timeout in seconds
 
 # Media handling settings
