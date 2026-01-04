@@ -12,7 +12,9 @@
 
 A desktop application that provides a user-friendly graphical interface for downloading content from Instagram profiles using the [Instaloader](https://instaloader.github.io/) Python library.
 
-![Screenshot](assets/screenshot.jpg)
+![Screenshot](assets/screenshot-a.jpg)
+
+![Screenshot](assets/screenshot-b.jpg)
 
 ## ☕ Support
 
