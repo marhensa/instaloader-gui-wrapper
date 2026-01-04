@@ -85,7 +85,7 @@ downloads/
     └── highlights/
 ```
 
-**Saved Posts Downloads(Default):**
+**Saved Posts Downloads (Default):**
 ```
 downloads/
 └── saved_posts/
