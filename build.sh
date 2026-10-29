@@ -12,6 +12,8 @@ echo "========================================"
 # Check if running in virtual environment
 if [ -d ".venv" ]; then
     source .venv/bin/activate
+elif [ -d "venv" ]; then
+    source venv/bin/activate
 fi
 
 # Install PyInstaller if not installed
@@ -22,7 +24,19 @@ fi
 
 # Build the executable
 echo "Building executable with PyInstaller..."
-pyinstaller --onefile --windowed --name "Instaloader-GUI-Wrapper" run.py
+DATA_ARGS=()
+[ -f "icon.ico" ] && DATA_ARGS+=(--add-data "icon.ico:.")
+[ -d "assets" ] && DATA_ARGS+=(--add-data "assets:assets")
+
+pyinstaller --onefile --windowed --name "Instaloader-GUI-Wrapper" "${DATA_ARGS[@]}" run.py
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "========================================"
+    echo "PyInstaller build failed!"
+    echo "========================================"
+    exit 1
+fi
 
 echo ""
 echo "========================================"
@@ -54,7 +68,7 @@ Name=Instaloader GUI Wrapper
 Exec=Instaloader-GUI-Wrapper
 Icon=instaloader-gui-wrapper
 Type=Application
-Categories=Utility;Network;
+Categories=Network;FileTransfer;
 Comment=Download Instagram content with a GUI
 StartupWMClass=instaloader-gui-wrapper
 EOF
@@ -89,7 +103,16 @@ EOF
     fi
     
     # Create AppImage
-    ARCH=x86_64 ./appimagetool-x86_64.AppImage "$APPDIR"
+    ARCH=x86_64 ./appimagetool-x86_64.AppImage "$APPDIR" "Instaloader-GUI-Wrapper-x86_64.AppImage"
+    
+    if [ $? -ne 0 ]; then
+        rm -rf "$APPDIR"
+        echo ""
+        echo "========================================"
+        echo "AppImage creation failed!"
+        echo "========================================"
+        exit 1
+    fi
     
     # Cleanup
     rm -rf "$APPDIR"

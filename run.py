@@ -75,8 +75,13 @@ def main():
     app.setDesktopFileName("instaloader-gui-wrapper")
     
     # Set application icon
-    app_root = os.path.dirname(os.path.abspath(__file__))
+    app_root = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     icon_path = os.path.join(app_root, "assets", "icon.png")
+    if not os.path.exists(icon_path):
+        fallback_ico = os.path.join(app_root, "icon.ico")
+        if os.path.exists(fallback_ico):
+            icon_path = fallback_ico
+
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
         logger.info(f"Application icon set from: {icon_path}")
